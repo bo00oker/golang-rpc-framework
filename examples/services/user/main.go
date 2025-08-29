@@ -375,4 +375,3 @@ func main() {
 
 	log.Info("User service stopped")
 }
-

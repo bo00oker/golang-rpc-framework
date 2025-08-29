@@ -124,4 +124,3 @@ func (u *UserClient) TestUserService(ctx context.Context) {
 
 	log.Info("✅ User service test completed!")
 }
-

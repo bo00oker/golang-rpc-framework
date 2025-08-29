@@ -1,3 +1,18 @@
+# API Gateway配置
+gateway:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  enable_cors: true
+  enable_auth: true
+  enable_metrics: true
+  enable_rate_limit: true
+  rate_limit: 1000  # 每分钟请求限制
+
+# 注册中心类型配置
+registry:
+  type: "nacos"  # nacos, etcd
+
 server:
   address: ":50051"
   port: 50051
@@ -94,3 +109,62 @@ trace:
   jaeger_endpoint: "http://localhost:14268/api/traces"
   sample_rate: 1.0
   enable_console: true
+
+# 数据库配置
+database:
+  driver: "mysql"  # mysql, postgres
+  dsn: "user:password@tcp(localhost:3306)/rpc_framework?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  conn_max_idle_time: 30m
+
+# 缓存配置
+cache:
+  type: "redis"  # redis, memory
+  default_ttl: 1h
+  max_size: 1000
+  enable_stats: true
+  redis:
+    addr: "localhost:6379"
+    password: ""
+    db: 0
+    pool_size: 10
+    min_idle_conns: 5
+    dial_timeout: 5s
+    read_timeout: 3s
+    write_timeout: 3s
+
+# 安全配置
+security:
+  jwt_secret: "your-secret-key-here"
+  token_expiry: 1h
+  refresh_expiry: 24h
+  issuer: "rpc-framework"
+  enable_tls: false
+  cert_file: "./certs/server.crt"
+  key_file: "./certs/server.key"
+
+# 指标监控配置
+metrics:
+  enable: true
+  port: 9090
+  path: "/metrics"
+  namespace: "rpc_framework"
+  subsystem: "server"
+
+# 健康检查配置
+health:
+  enable: true
+  port: 8080
+  endpoint: "/health"
+
+# 测试配置
+test:
+  enable_integration_tests: true
+  test_db_dsn: "user:password@tcp(localhost:3306)/rpc_framework_test?charset=utf8mb4&parseTime=True&loc=Local"
+  load_test:
+    duration: 30s
+    concurrency: 50
+    requests_per_sec: 100
+    ramp_up_time: 5s

@@ -89,4 +89,3 @@ func (l *SimpleLogger) WithField(key string, value interface{}) logger.Logger {
 func (l *SimpleLogger) WithFields(fields map[string]interface{}) logger.Logger {
 	return l
 }
-

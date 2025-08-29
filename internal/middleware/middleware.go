@@ -13,12 +13,12 @@ import (
 func LoggingMiddleware() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		start := time.Now()
-		
+
 		// 调用下一个处理器
 		resp, err := handler(ctx, req)
-		
+
 		duration := time.Since(start)
-		
+
 		// 记录日志
 		if err != nil {
 			// 这里可以集成具体的日志库
@@ -26,9 +26,9 @@ func LoggingMiddleware() grpc.UnaryServerInterceptor {
 		} else {
 			// logger.Infof("gRPC call success: method=%s, duration=%v", info.FullMethod, duration)
 		}
-		
+
 		_ = duration // 避免未使用变量警告
-		
+
 		return resp, err
 	}
 }
@@ -42,7 +42,7 @@ func RecoveryMiddleware() grpc.UnaryServerInterceptor {
 				err = status.Errorf(codes.Internal, "internal server error")
 			}
 		}()
-		
+
 		return handler(ctx, req)
 	}
 }
@@ -52,7 +52,7 @@ func TimeoutMiddleware(timeout time.Duration) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		
+
 		return handler(ctx, req)
 	}
 }
@@ -62,22 +62,22 @@ func RateLimitMiddleware(maxRequests int, window time.Duration) grpc.UnaryServer
 	// 简单的内存限流实现，生产环境建议使用Redis等
 	requestCounts := make(map[string]int)
 	lastReset := time.Now()
-	
+
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		now := time.Now()
-		
+
 		// 重置计数器
 		if now.Sub(lastReset) > window {
 			requestCounts = make(map[string]int)
 			lastReset = now
 		}
-		
+
 		// 检查限流
 		method := info.FullMethod
 		if requestCounts[method] >= maxRequests {
 			return nil, status.Errorf(codes.ResourceExhausted, "rate limit exceeded")
 		}
-		
+
 		requestCounts[method]++
 		return handler(ctx, req)
 	}
@@ -90,7 +90,7 @@ func AuthMiddleware(authFunc func(ctx context.Context) error) grpc.UnaryServerIn
 		if err := authFunc(ctx); err != nil {
 			return nil, status.Errorf(codes.Unauthenticated, "authentication failed: %v", err)
 		}
-		
+
 		return handler(ctx, req)
 	}
 }
@@ -99,15 +99,15 @@ func AuthMiddleware(authFunc func(ctx context.Context) error) grpc.UnaryServerIn
 func MetricsMiddleware() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		start := time.Now()
-		
+
 		resp, err := handler(ctx, req)
-		
+
 		duration := time.Since(start)
-		
+
 		// 收集指标
 		// metrics.RecordRPCDuration(info.FullMethod, duration)
 		// metrics.RecordRPCCount(info.FullMethod, err == nil)
-		
+
 		_ = duration // 避免未使用变量警告
 		return resp, err
 	}
@@ -119,7 +119,7 @@ func ChainUnaryInterceptors(interceptors ...grpc.UnaryServerInterceptor) grpc.Un
 		if len(interceptors) == 0 {
 			return handler(ctx, req)
 		}
-		
+
 		// 递归构建拦截器链
 		var chainHandler grpc.UnaryHandler
 		chainHandler = func(currentCtx context.Context, currentReq interface{}) (interface{}, error) {
@@ -130,7 +130,7 @@ func ChainUnaryInterceptors(interceptors ...grpc.UnaryServerInterceptor) grpc.Un
 				return ChainUnaryInterceptors(interceptors[1:]...)(nextCtx, nextReq, info, handler)
 			})
 		}
-		
+
 		return chainHandler(ctx, req)
 	}
 }

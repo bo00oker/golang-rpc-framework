@@ -156,4 +156,3 @@ func (o *OrderClient) TestOrderService(ctx context.Context) {
 
 	log.Info("✅ Order service test completed!")
 }
-

@@ -36,7 +36,7 @@ type EtcdRegistry struct {
 	mu       sync.RWMutex
 	client   *clientv3.Client
 	options  *EtcdOptions
-	leases   map[string]clientv3.LeaseID // 服务ID到租约ID的映射
+	leases   map[string]clientv3.LeaseID   // 服务ID到租约ID的映射
 	watchers map[string]context.CancelFunc // 监听器取消函数
 }
 
