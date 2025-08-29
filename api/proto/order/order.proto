@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package order;
+
+option go_package = "github.com/rpc-framework/core/proto/order";
+
+// OrderService 订单服务
+service OrderService {
+  // CreateOrder 创建订单
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  
+  // GetOrder 查询订单
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  
+  // ListOrders 查询订单列表
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  
+  // UpdateOrder 更新订单
+  rpc UpdateOrder(UpdateOrderRequest) returns (UpdateOrderResponse);
+  
+  // DeleteOrder 删除订单
+  rpc DeleteOrder(DeleteOrderRequest) returns (DeleteOrderResponse);
+  
+  // GetOrdersByUser 根据用户ID查询订单
+  rpc GetOrdersByUser(GetOrdersByUserRequest) returns (GetOrdersByUserResponse);
+}
+
+// Order 订单信息
+message Order {
+  int64  id          = 1;
+  int64  user_id     = 2;
+  string order_no    = 3;
+  double amount      = 4;
+  string status      = 5;
+  string description = 6;
+  int64  created_at  = 7;
+  int64  updated_at  = 8;
+}
+
+// OrderItem 订单项
+message OrderItem {
+  int64  id       = 1;
+  int64  order_id = 2;
+  int64  product_id = 3;
+  string product_name = 4;
+  double price    = 5;
+  int32  quantity = 6;
+}
+
+// CreateOrderRequest 创建订单请求
+message CreateOrderRequest {
+  int64  user_id     = 1;
+  double amount      = 2;
+  string description = 3;
+  repeated OrderItem items = 4;
+}
+
+// CreateOrderResponse 创建订单响应
+message CreateOrderResponse {
+  Order  order = 1;
+  string message = 2;
+}
+
+// GetOrderRequest 查询订单请求
+message GetOrderRequest {
+  int64 order_id = 1;
+}
+
+// GetOrderResponse 查询订单响应
+message GetOrderResponse {
+  Order  order = 1;
+  string message = 2;
+}
+
+// ListOrdersRequest 查询订单列表请求
+message ListOrdersRequest {
+  int32 page      = 1;
+  int32 page_size = 2;
+  string status   = 3;
+  int64  user_id  = 4;
+}
+
+// ListOrdersResponse 查询订单列表响应
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  int32         total   = 2;
+  int32         page    = 3;
+  int32         page_size = 4;
+  string        message = 5;
+}
+
+// UpdateOrderRequest 更新订单请求
+message UpdateOrderRequest {
+  int64  order_id    = 1;
+  double amount      = 2;
+  string status      = 3;
+  string description = 4;
+}
+
+// UpdateOrderResponse 更新订单响应
+message UpdateOrderResponse {
+  Order  order = 1;
+  string message = 2;
+}
+
+// DeleteOrderRequest 删除订单请求
+message DeleteOrderRequest {
+  int64 order_id = 1;
+}
+
+// DeleteOrderResponse 删除订单响应
+message DeleteOrderResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+// GetOrdersByUserRequest 根据用户ID查询订单请求
+message GetOrdersByUserRequest {
+  int64 user_id = 1;
+  int32 page    = 2;
+  int32 page_size = 3;
+}
+
+// GetOrdersByUserResponse 根据用户ID查询订单响应
+message GetOrdersByUserResponse {
+  repeated Order orders = 1;
+  int32         total   = 2;
+  int32         page    = 3;
+  int32         page_size = 4;
+  string        message = 5;
+}

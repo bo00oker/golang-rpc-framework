@@ -1,0 +1,96 @@
+server:
+  address: ":50051"
+  port: 50051
+  
+  # 高并发优化配置
+  max_concurrent_requests: 1000
+  request_timeout: 30s
+  max_connections: 1000
+  connection_timeout: 5s
+  keep_alive_time: 30s
+  keep_alive_timeout: 5s
+  rate_limit: 1000
+  enable_metrics: true
+  
+  # 内存池配置
+  enable_memory_pool: true
+  memory_pool_size: 1000
+  memory_pool_max_size: 10000
+  
+  # 异步处理配置
+  enable_async: true
+  async_worker_count: 10
+  async_queue_size: 1000
+  
+  # 健康检查配置
+  enable_health_check: true
+  health_check_interval: 30s
+  health_check_timeout: 5s
+
+client:
+  timeout: 30s
+  keep_alive: 30s
+  max_recv_msg_size: 4194304  # 4MB
+  max_send_msg_size: 4194304  # 4MB
+  retry_attempts: 3
+  retry_delay: 1s
+  load_balance_type: "round_robin"
+  
+  # 高并发优化配置
+  max_connections: 100
+  max_idle_conns: 10
+  conn_timeout: 5s
+  idle_timeout: 30s
+  max_retries: 3
+  retry_backoff: 1s
+  circuit_breaker_threshold: 5
+  circuit_breaker_timeout: 30s
+  
+  # 缓存配置
+  enable_cache: true
+  cache_ttl: 5m
+  cache_max_size: 1000
+  
+  # 异步处理配置
+  enable_async: true
+  async_worker_count: 10
+  async_queue_size: 1000
+
+etcd:
+  endpoints:
+    - "localhost:2379"
+  timeout: 5s
+  username: ""
+  password: ""
+
+nacos:
+  server_addr: "localhost:8848"
+  namespace: "public"
+  group: "DEFAULT_GROUP"
+  timeout: 10s
+  username: "nacos"
+  password: "nacos"
+
+nats:
+  url: "nats://localhost:4222"
+  timeout: 10s
+  username: ""
+  password: ""
+
+log:
+  level: "info"
+  format: "json"
+  output: "file"
+  filename: "logs/app.log"
+  max_size: 100
+  max_backups: 3
+  max_age: 28
+  compress: true
+
+trace:
+  service_name: "rpc-framework"
+  service_version: "v1.0.0"
+  environment: "development"
+  jaeger_endpoint: "http://localhost:14268/api/traces"
+  sample_rate: 1.0
+  enable_console: true
