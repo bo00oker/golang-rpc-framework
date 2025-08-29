@@ -74,10 +74,59 @@ rpc2/
 ### 环境准备
 
 - Go 1.21+
-- Nacos 2.x (或 Etcd 3.x)
-- Docker (可选)
+- Nacos 2.x (或 Etcd 3.x)  
+- Docker (推荐)
 
-### 安装部署
+### 🐳 Docker部署（推荐）
+
+#### 快速启动
+```bash
+# 克隆项目
+git clone https://github.com/bo00oker/golang-rpc-framework.git
+cd golang-rpc-framework
+
+# 快速启动所有服务
+./quick-start.sh
+```
+
+#### 完整管理
+```bash
+# 完整启动（包含监控）
+./docker-start.sh start
+
+# 查看服务状态  
+./docker-start.sh status
+
+# 查看日志
+./docker-start.sh logs gateway
+
+# 停止服务
+./docker-start.sh stop
+```
+
+#### 开发环境
+```bash
+# 仅启动基础设施（MySQL、Redis、Nacos）
+./dev-start.sh
+
+# 然后手动启动业务服务进行开发
+go run cmd/user-service/main.go
+go run cmd/order-service/main.go
+go run cmd/gateway/main.go
+```
+
+#### 服务访问地址
+- **API网关**: http://localhost:8080
+- **Nacos控制台**: http://localhost:8848/nacos (nacos/nacos)
+- **Jaeger UI**: http://localhost:16686  
+- **Grafana**: http://localhost:3000 (admin/admin123)
+- **Prometheus**: http://localhost:9091
+
+详细的Docker使用说明请参阅 [DOCKER.md](DOCKER.md)
+
+### 传统部署
+
+#### 安装部署
 
 ```bash
 # 克隆项目
