@@ -1,4 +1,4 @@
-package user
+package service
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/rpc-framework/core/internal/user/model"
 	"github.com/rpc-framework/core/internal/user/repository"
-	"github.com/rpc-framework/core/internal/user/service"
 	"github.com/rpc-framework/core/pkg/testutils"
 	"github.com/rpc-framework/core/pkg/trace"
 	"github.com/stretchr/testify/assert"
@@ -18,8 +17,8 @@ import (
 func TestUserService_CreateUser(t *testing.T) {
 	// 设置
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 
@@ -95,8 +94,8 @@ func TestUserService_CreateUser(t *testing.T) {
 func TestUserService_GetUser(t *testing.T) {
 	// 设置
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 
@@ -142,8 +141,8 @@ func TestUserService_GetUser(t *testing.T) {
 func TestUserService_UpdateUser(t *testing.T) {
 	// 设置
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 
@@ -193,8 +192,8 @@ func TestUserService_UpdateUser(t *testing.T) {
 func TestUserService_ListUsers(t *testing.T) {
 	// 设置
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 
@@ -268,8 +267,8 @@ func BenchmarkUserService_CreateUser(b *testing.B) {
 	runner := testutils.NewBenchmarkRunner("CreateUser").
 		Setup(func(b *testing.B) interface{} {
 			userRepo := repository.NewMemoryUserRepository()
-			tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-			userService := service.NewUserService(userRepo, tracer)
+			tracer, _ := trace.NewTracer(trace.DefaultConfig())
+			userService := NewUserService(userRepo, tracer)
 
 			return map[string]interface{}{
 				"service": userService,
@@ -278,7 +277,7 @@ func BenchmarkUserService_CreateUser(b *testing.B) {
 		}).
 		Run(func(b *testing.B, data interface{}) {
 			d := data.(map[string]interface{})
-			userService := d["service"].(service.UserService)
+			userService := d["service"].(UserService)
 			ctx := d["ctx"].(context.Context)
 
 			req := &model.CreateUserRequest{
@@ -304,8 +303,8 @@ func TestUserService_Integration(t *testing.T) {
 
 	// 集成测试：测试整个用户服务流程
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 
@@ -362,8 +361,8 @@ func TestUserService_Integration(t *testing.T) {
 func TestUserService_Concurrency(t *testing.T) {
 	// 并发测试
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 	concurrency := 50
@@ -404,8 +403,8 @@ func TestUserService_Concurrency(t *testing.T) {
 func TestUserService_EventualConsistency(t *testing.T) {
 	// 最终一致性测试
 	userRepo := repository.NewMemoryUserRepository()
-	tracer, _ := trace.NewTracer(&trace.TracerConfig{})
-	userService := service.NewUserService(userRepo, tracer)
+	tracer, _ := trace.NewTracer(trace.DefaultConfig())
+	userService := NewUserService(userRepo, tracer)
 
 	ctx := context.Background()
 

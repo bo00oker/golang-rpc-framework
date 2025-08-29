@@ -3,7 +3,9 @@ package client
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rpc-framework/core/internal/interceptor"
@@ -104,20 +106,29 @@ type ConnectionStats struct {
 	AccessCount  int64
 }
 
-// Cache 缓存管理器
+// Cache 分片缓存管理器 - 优化锁竞争
 type Cache struct {
-	mu      sync.RWMutex
-	items   map[string]*CacheItem
+	shards  []cacheShard
+	mask    uint64
 	ttl     time.Duration
 	maxSize int
 }
 
-// CacheItem 缓存项
+// cacheShard 缓存分片
+type cacheShard struct {
+	mu    sync.RWMutex
+	items map[string]*CacheItem
+	count int64 // 使用原子操作计数
+}
+
+const cacheShardCount = 16 // 16个分片，减少锁竞争
+
+// CacheItem 缓存项 - 优化内存布局
 type CacheItem struct {
 	Value       interface{}
 	ExpireTime  time.Time
 	AccessTime  time.Time
-	AccessCount int64
+	AccessCount int64 // 使用原子操作
 }
 
 // AsyncProcessor 异步处理器
@@ -216,14 +227,10 @@ func NewClient(opts *ClientOptions) *Client {
 		state:     StateClosed,
 	}
 
-	// 创建缓存
+	// 创建分片缓存
 	var cache *Cache
 	if opts.EnableCache {
-		cache = &Cache{
-			items:   make(map[string]*CacheItem),
-			ttl:     opts.CacheTTL,
-			maxSize: opts.CacheMaxSize,
-		}
+		cache = NewShardedCache(opts.CacheTTL, opts.CacheMaxSize)
 	}
 
 	// 创建异步处理器
@@ -260,25 +267,25 @@ func DefaultClientOptions() *ClientOptions {
 		RetryDelay:      time.Second,
 		LoadBalanceType: "round_robin",
 
-		// 高并发配置
-		MaxConnections:          100,
-		MaxIdleConns:            10,
-		ConnTimeout:             5 * time.Second,
-		IdleTimeout:             30 * time.Second,
-		MaxRetries:              3,
-		RetryBackoff:            time.Second,
-		CircuitBreakerThreshold: 5,
-		CircuitBreakerTimeout:   30 * time.Second,
+		// 高并发配置 - 优化后的默认值
+		MaxConnections:          500,                    // 提升5倍
+		MaxIdleConns:            100,                    // 提升10倍
+		ConnTimeout:             3 * time.Second,        // 降低连接超时
+		IdleTimeout:             300 * time.Second,      // 增加空闲超时
+		MaxRetries:              5,                      // 增加重试次数
+		RetryBackoff:            100 * time.Millisecond, // 降低重试间隔
+		CircuitBreakerThreshold: 10,                     // 增加熔断阈值
+		CircuitBreakerTimeout:   60 * time.Second,       // 增加熔断超时
 
-		// 缓存配置
+		// 缓存配置 - 优化后的默认值
 		EnableCache:  true,
 		CacheTTL:     5 * time.Minute,
-		CacheMaxSize: 1000,
+		CacheMaxSize: 10000, // 提升10倍
 
-		// 异步处理配置
+		// 异步处理配置 - 优化后的默认值
 		EnableAsync:      true,
-		AsyncWorkerCount: 10,
-		AsyncQueueSize:   1000,
+		AsyncWorkerCount: 32,    // 增加到32个工作协程
+		AsyncQueueSize:   50000, // 提升50倍
 	}
 }
 
@@ -791,77 +798,6 @@ func (lclb *LeastConnectionsLoadBalancer) GetStats() map[string]interface{} {
 	return stats
 }
 
-// Get 从缓存获取值
-func (c *Cache) Get(key string) interface{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if item, exists := c.items[key]; exists {
-		if time.Now().Before(item.ExpireTime) {
-			item.AccessTime = time.Now()
-			item.AccessCount++
-			return item.Value
-		}
-		delete(c.items, key)
-	}
-
-	return nil
-}
-
-// Set 设置缓存值
-func (c *Cache) Set(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// 检查缓存大小
-	if len(c.items) >= c.maxSize {
-		c.evictLRU()
-	}
-
-	c.items[key] = &CacheItem{
-		Value:       value,
-		ExpireTime:  time.Now().Add(c.ttl),
-		AccessTime:  time.Now(),
-		AccessCount: 1,
-	}
-}
-
-// evictLRU 淘汰最近最少使用的项
-func (c *Cache) evictLRU() {
-	var oldestKey string
-	var oldestTime time.Time
-
-	for key, item := range c.items {
-		if oldestKey == "" || item.AccessTime.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = item.AccessTime
-		}
-	}
-
-	if oldestKey != "" {
-		delete(c.items, oldestKey)
-	}
-}
-
-// Clear 清空缓存
-func (c *Cache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items = make(map[string]*CacheItem)
-}
-
-// GetStats 获取缓存统计信息
-func (c *Cache) GetStats() map[string]interface{} {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return map[string]interface{}{
-		"size":     len(c.items),
-		"max_size": c.maxSize,
-		"ttl":      c.ttl,
-	}
-}
-
 // Start 启动异步处理器
 func (ap *AsyncProcessor) Start() {
 	ap.mu.Lock()
@@ -969,5 +905,145 @@ func chainStreamClient(interceptors ...grpc.StreamClientInterceptor) grpc.Stream
 			}
 		}
 		return chain(ctx, desc, cc, method, opts...)
+	}
+}
+
+// NewShardedCache 创建分片缓存
+func NewShardedCache(ttl time.Duration, maxSize int) *Cache {
+	cache := &Cache{
+		shards:  make([]cacheShard, cacheShardCount),
+		mask:    cacheShardCount - 1,
+		ttl:     ttl,
+		maxSize: maxSize,
+	}
+
+	// 初始化每个分片
+	for i := range cache.shards {
+		cache.shards[i].items = make(map[string]*CacheItem)
+	}
+
+	return cache
+}
+
+// getShard 获取key对应的分片
+func (c *Cache) getShard(key string) *cacheShard {
+	h := fnv.New64a()
+	h.Write([]byte(key))
+	return &c.shards[h.Sum64()&c.mask]
+}
+
+// Set 设置缓存项 - 优化后无全局锁
+func (c *Cache) Set(key string, value interface{}) {
+	if c == nil {
+		return
+	}
+
+	shard := c.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	now := time.Now()
+	item := &CacheItem{
+		Value:       value,
+		ExpireTime:  now.Add(c.ttl),
+		AccessTime:  now,
+		AccessCount: 1,
+	}
+
+	shard.items[key] = item
+	atomic.AddInt64(&shard.count, 1)
+
+	// 简单的LRU清理机制
+	if len(shard.items) > c.maxSize/cacheShardCount {
+		c.evictOldest(shard)
+	}
+}
+
+// Get 获取缓存项 - 优化后无全局锁
+func (c *Cache) Get(key string) interface{} {
+	if c == nil {
+		return nil
+	}
+
+	shard := c.getShard(key)
+	shard.mu.RLock()
+	item, exists := shard.items[key]
+	shard.mu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	// 检查过期
+	if time.Now().After(item.ExpireTime) {
+		shard.mu.Lock()
+		delete(shard.items, key)
+		atomic.AddInt64(&shard.count, -1)
+		shard.mu.Unlock()
+		return nil
+	}
+
+	// 更新访问统计 - 使用原子操作
+	atomic.AddInt64(&item.AccessCount, 1)
+	item.AccessTime = time.Now()
+
+	return item.Value
+}
+
+// Delete 删除缓存项
+func (c *Cache) Delete(key string) {
+	if c == nil {
+		return
+	}
+
+	shard := c.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, exists := shard.items[key]; exists {
+		delete(shard.items, key)
+		atomic.AddInt64(&shard.count, -1)
+	}
+}
+
+// evictOldest 清理最旧的缓存项
+func (c *Cache) evictOldest(shard *cacheShard) {
+	if len(shard.items) == 0 {
+		return
+	}
+
+	var oldestKey string
+	var oldestTime time.Time = time.Now()
+
+	for key, item := range shard.items {
+		if item.AccessTime.Before(oldestTime) {
+			oldestTime = item.AccessTime
+			oldestKey = key
+		}
+	}
+
+	if oldestKey != "" {
+		delete(shard.items, oldestKey)
+		atomic.AddInt64(&shard.count, -1)
+	}
+}
+
+// GetStats 获取缓存统计信息
+func (c *Cache) GetStats() map[string]interface{} {
+	if c == nil {
+		return nil
+	}
+
+	var totalItems int64
+	for i := range c.shards {
+		totalItems += atomic.LoadInt64(&c.shards[i].count)
+	}
+
+	return map[string]interface{}{
+		"total_items": totalItems,
+		"shard_count": cacheShardCount,
+		"max_size":    c.maxSize,
+		"ttl_seconds": c.ttl.Seconds(),
+		"utilization": float64(totalItems) / float64(c.maxSize),
 	}
 }

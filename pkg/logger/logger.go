@@ -1,13 +1,17 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/rpc-framework/core/pkg/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -15,6 +19,7 @@ import (
 
 // Logger 日志接口
 type Logger interface {
+	// 基本日志方法
 	Debug(args ...interface{})
 	Debugf(format string, args ...interface{})
 	Info(args ...interface{})
@@ -25,8 +30,23 @@ type Logger interface {
 	Errorf(format string, args ...interface{})
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
+
+	// 带context的日志方法（自动添加trace_id）
+	DebugCtx(ctx context.Context, args ...interface{})
+	DebugfCtx(ctx context.Context, format string, args ...interface{})
+	InfoCtx(ctx context.Context, args ...interface{})
+	InfofCtx(ctx context.Context, format string, args ...interface{})
+	WarnCtx(ctx context.Context, args ...interface{})
+	WarnfCtx(ctx context.Context, format string, args ...interface{})
+	ErrorCtx(ctx context.Context, args ...interface{})
+	ErrorfCtx(ctx context.Context, format string, args ...interface{})
+	FatalCtx(ctx context.Context, args ...interface{})
+	FatalfCtx(ctx context.Context, format string, args ...interface{})
+
+	// 添加字段
 	WithField(key string, value interface{}) Logger
 	WithFields(fields map[string]interface{}) Logger
+	WithTraceID(traceID string) Logger
 }
 
 // ZapLogger zap 实现
@@ -45,18 +65,24 @@ type Config struct {
 	MaxBackups int    `json:"max_backups"`
 	MaxAge     int    `json:"max_age"`
 	Compress   bool   `json:"compress"`
+	// 是否显示代码行号
+	ShowCaller bool `json:"show_caller"`
+	// 是否自动添加trace_id
+	EnableTraceID bool `json:"enable_trace_id"`
 }
 
 // DefaultConfig 默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Level:      "info",
-		Format:     "json",
-		Output:     "stdout",
-		MaxSize:    100,
-		MaxBackups: 3,
-		MaxAge:     28,
-		Compress:   true,
+		Level:         "info",
+		Format:        "json",
+		Output:        "stdout",
+		MaxSize:       100,
+		MaxBackups:    3,
+		MaxAge:        28,
+		Compress:      true,
+		ShowCaller:    true, // 默认显示代码行号
+		EnableTraceID: true, // 默认启用trace_id
 	}
 }
 
@@ -97,6 +123,11 @@ func NewLogger(config *Config) (Logger, error) {
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
+
+	// 根据配置决定是否显示调用者信息
+	if !config.ShowCaller {
+		encCfg.CallerKey = zapcore.OmitKey
+	}
 	var encoder zapcore.Encoder
 	switch config.Format {
 	case "json":
@@ -113,7 +144,14 @@ func NewLogger(config *Config) (Logger, error) {
 	}
 
 	core := zapcore.NewCore(encoder, ws, lvl)
-	base := zap.New(core, zap.AddCaller())
+
+	// 添加调用者信息和跳过指定的调用层次
+	options := []zap.Option{}
+	if config.ShowCaller {
+		options = append(options, zap.AddCaller(), zap.AddCallerSkip(1))
+	}
+
+	base := zap.New(core, options...)
 	sug := base.Sugar()
 	return &ZapLogger{base: base, sugared: sug}, nil
 }
@@ -146,34 +184,44 @@ func buildWriteSyncer(config *Config) (zapcore.WriteSyncer, error) {
 }
 
 // Debug 调试日志
-func (l *ZapLogger) Debug(args ...interface{}) { l.sugared.Debug(args...) }
+func (l *ZapLogger) Debug(args ...interface{}) { l.logWithCaller(zapcore.DebugLevel, "", args...) }
 
 // Debugf 格式化调试日志
-func (l *ZapLogger) Debugf(format string, args ...interface{}) { l.sugared.Debugf(format, args...) }
+func (l *ZapLogger) Debugf(format string, args ...interface{}) {
+	l.logWithCallerf(zapcore.DebugLevel, format, args...)
+}
 
 // Info 信息日志
-func (l *ZapLogger) Info(args ...interface{}) { l.sugared.Info(args...) }
+func (l *ZapLogger) Info(args ...interface{}) { l.logWithCaller(zapcore.InfoLevel, "", args...) }
 
 // Infof 格式化信息日志
-func (l *ZapLogger) Infof(format string, args ...interface{}) { l.sugared.Infof(format, args...) }
+func (l *ZapLogger) Infof(format string, args ...interface{}) {
+	l.logWithCallerf(zapcore.InfoLevel, format, args...)
+}
 
 // Warn 警告日志
-func (l *ZapLogger) Warn(args ...interface{}) { l.sugared.Warn(args...) }
+func (l *ZapLogger) Warn(args ...interface{}) { l.logWithCaller(zapcore.WarnLevel, "", args...) }
 
 // Warnf 格式化警告日志
-func (l *ZapLogger) Warnf(format string, args ...interface{}) { l.sugared.Warnf(format, args...) }
+func (l *ZapLogger) Warnf(format string, args ...interface{}) {
+	l.logWithCallerf(zapcore.WarnLevel, format, args...)
+}
 
 // Error 错误日志
-func (l *ZapLogger) Error(args ...interface{}) { l.sugared.Error(args...) }
+func (l *ZapLogger) Error(args ...interface{}) { l.logWithCaller(zapcore.ErrorLevel, "", args...) }
 
 // Errorf 格式化错误日志
-func (l *ZapLogger) Errorf(format string, args ...interface{}) { l.sugared.Errorf(format, args...) }
+func (l *ZapLogger) Errorf(format string, args ...interface{}) {
+	l.logWithCallerf(zapcore.ErrorLevel, format, args...)
+}
 
 // Fatal 致命错误日志
-func (l *ZapLogger) Fatal(args ...interface{}) { l.sugared.Fatal(args...) }
+func (l *ZapLogger) Fatal(args ...interface{}) { l.logWithCaller(zapcore.FatalLevel, "", args...) }
 
 // Fatalf 格式化致命错误日志
-func (l *ZapLogger) Fatalf(format string, args ...interface{}) { l.sugared.Fatalf(format, args...) }
+func (l *ZapLogger) Fatalf(format string, args ...interface{}) {
+	l.logWithCallerf(zapcore.FatalLevel, format, args...)
+}
 
 // WithField 添加字段
 func (l *ZapLogger) WithField(key string, value interface{}) Logger {
@@ -187,6 +235,162 @@ func (l *ZapLogger) WithFields(fields map[string]interface{}) Logger {
 		kv = append(kv, k, v)
 	}
 	return &ZapLogger{base: l.base, sugared: l.sugared.With(kv...)}
+}
+
+// WithTraceID 添加trace_id字段
+func (l *ZapLogger) WithTraceID(traceID string) Logger {
+	if traceID == "" {
+		return l
+	}
+	return &ZapLogger{base: l.base, sugared: l.sugared.With("trace_id", traceID)}
+}
+
+// ========== 带Context的日志方法（自动添加trace_id） ==========
+
+// DebugCtx 带context的调试日志
+func (l *ZapLogger) DebugCtx(ctx context.Context, args ...interface{}) {
+	l.logWithCallerCtx(ctx, zapcore.DebugLevel, "", args...)
+}
+
+// DebugfCtx 带context的格式化调试日志
+func (l *ZapLogger) DebugfCtx(ctx context.Context, format string, args ...interface{}) {
+	l.logWithCallerfCtx(ctx, zapcore.DebugLevel, format, args...)
+}
+
+// InfoCtx 带context的信息日志
+func (l *ZapLogger) InfoCtx(ctx context.Context, args ...interface{}) {
+	l.logWithCallerCtx(ctx, zapcore.InfoLevel, "", args...)
+}
+
+// InfofCtx 带context的格式化信息日志
+func (l *ZapLogger) InfofCtx(ctx context.Context, format string, args ...interface{}) {
+	l.logWithCallerfCtx(ctx, zapcore.InfoLevel, format, args...)
+}
+
+// WarnCtx 带context的警告日志
+func (l *ZapLogger) WarnCtx(ctx context.Context, args ...interface{}) {
+	l.logWithCallerCtx(ctx, zapcore.WarnLevel, "", args...)
+}
+
+// WarnfCtx 带context的格式化警告日志
+func (l *ZapLogger) WarnfCtx(ctx context.Context, format string, args ...interface{}) {
+	l.logWithCallerfCtx(ctx, zapcore.WarnLevel, format, args...)
+}
+
+// ErrorCtx 带context的错误日志
+func (l *ZapLogger) ErrorCtx(ctx context.Context, args ...interface{}) {
+	l.logWithCallerCtx(ctx, zapcore.ErrorLevel, "", args...)
+}
+
+// ErrorfCtx 带context的格式化错误日志
+func (l *ZapLogger) ErrorfCtx(ctx context.Context, format string, args ...interface{}) {
+	l.logWithCallerfCtx(ctx, zapcore.ErrorLevel, format, args...)
+}
+
+// FatalCtx 带context的致命错误日志
+func (l *ZapLogger) FatalCtx(ctx context.Context, args ...interface{}) {
+	l.logWithCallerCtx(ctx, zapcore.FatalLevel, "", args...)
+}
+
+// FatalfCtx 带context的格式化致命错误日志
+func (l *ZapLogger) FatalfCtx(ctx context.Context, format string, args ...interface{}) {
+	l.logWithCallerfCtx(ctx, zapcore.FatalLevel, format, args...)
+}
+
+// ========== 私有辅助方法 ==========
+
+// logWithCaller 带调用者信息的日志记录
+func (l *ZapLogger) logWithCaller(level zapcore.Level, format string, args ...interface{}) {
+	fields := []zap.Field{}
+
+	// 添加调用者信息
+	if pc, file, line, ok := runtime.Caller(2); ok {
+		fields = append(fields, zap.String("file", formatCaller(file, line)))
+		fields = append(fields, zap.String("func", formatFunction(pc)))
+	}
+
+	var msg string
+	if format != "" {
+		msg = fmt.Sprintf(format, args...)
+	} else {
+		msg = fmt.Sprint(args...)
+	}
+
+	l.base.Log(level, msg, fields...)
+}
+
+// logWithCallerf 带调用者信息的格式化日志记录
+func (l *ZapLogger) logWithCallerf(level zapcore.Level, format string, args ...interface{}) {
+	l.logWithCaller(level, format, args...)
+}
+
+// logWithCallerCtx 带调用者信息和context的日志记录
+func (l *ZapLogger) logWithCallerCtx(ctx context.Context, level zapcore.Level, format string, args ...interface{}) {
+	fields := []zap.Field{}
+
+	// 添加trace_id
+	if traceID := extractTraceID(ctx); traceID != "" {
+		fields = append(fields, zap.String("trace_id", traceID))
+	}
+
+	// 添加调用者信息
+	if pc, file, line, ok := runtime.Caller(2); ok {
+		fields = append(fields, zap.String("file", formatCaller(file, line)))
+		fields = append(fields, zap.String("func", formatFunction(pc)))
+	}
+
+	var msg string
+	if format != "" {
+		msg = fmt.Sprintf(format, args...)
+	} else {
+		msg = fmt.Sprint(args...)
+	}
+
+	l.base.Log(level, msg, fields...)
+}
+
+// logWithCallerfCtx 带调用者信息和context的格式化日志记录
+func (l *ZapLogger) logWithCallerfCtx(ctx context.Context, level zapcore.Level, format string, args ...interface{}) {
+	l.logWithCallerCtx(ctx, level, format, args...)
+}
+
+// extractTraceID 从上下文中提取trace_id
+func extractTraceID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return span.SpanContext().TraceID().String()
+	}
+	return ""
+}
+
+// formatCaller 格式化调用者信息
+func formatCaller(file string, line int) string {
+	// 只显示文件名和行号
+	if idx := strings.LastIndex(file, "/"); idx >= 0 {
+		file = file[idx+1:]
+	}
+	return fmt.Sprintf("%s:%d", file, line)
+}
+
+// formatFunction 格式化函数名
+func formatFunction(pc uintptr) string {
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return "unknown"
+	}
+	name := fn.Name()
+	// 只显示函数名部分
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	if idx := strings.Index(name, "."); idx >= 0 {
+		return name[idx+1:]
+	}
+	return name
 }
 
 // MultiWriter 多输出写入器

@@ -1,13 +1,13 @@
 # API Gateway配置
 gateway:
   port: 8080
-  read_timeout: 30s
-  write_timeout: 30s
+  read_timeout: 15s                # 降低读超时
+  write_timeout: 15s               # 降低写超时
   enable_cors: true
   enable_auth: true
   enable_metrics: true
   enable_rate_limit: true
-  rate_limit: 1000  # 每分钟请求限制
+  rate_limit: 5000                 # 提升5倍限流
 
 # 注册中心类型配置
 registry:
@@ -18,24 +18,24 @@ server:
   port: 50051
   
   # 高并发优化配置
-  max_concurrent_requests: 1000
+  max_concurrent_requests: 10000  # 提升10倍并发能力
   request_timeout: 30s
-  max_connections: 1000
-  connection_timeout: 5s
-  keep_alive_time: 30s
-  keep_alive_timeout: 5s
-  rate_limit: 1000
+  max_connections: 5000            # 提升5倍连接数
+  connection_timeout: 3s           # 降低连接超时
+  keep_alive_time: 60s             # 增加保活时间
+  keep_alive_timeout: 10s          # 增加保活超时
+  rate_limit: 5000                 # 提升5倍限流阈值
   enable_metrics: true
   
   # 内存池配置
   enable_memory_pool: true
-  memory_pool_size: 1000
-  memory_pool_max_size: 10000
+  memory_pool_size: 10000          # 提升10倍内存池大小
+  memory_pool_max_size: 100000     # 提升10倍最大内存池
   
   # 异步处理配置
   enable_async: true
-  async_worker_count: 10
-  async_queue_size: 1000
+  async_worker_count: 32           # 增加到32个工作协程
+  async_queue_size: 50000          # 提升50倍队列大小
   
   # 健康检查配置
   enable_health_check: true
@@ -52,24 +52,24 @@ client:
   load_balance_type: "round_robin"
   
   # 高并发优化配置
-  max_connections: 100
-  max_idle_conns: 10
-  conn_timeout: 5s
-  idle_timeout: 30s
-  max_retries: 3
-  retry_backoff: 1s
-  circuit_breaker_threshold: 5
-  circuit_breaker_timeout: 30s
+  max_connections: 500             # 提升5倍连接数
+  max_idle_conns: 100              # 提升10倍空闲连接数
+  conn_timeout: 3s                 # 降低连接超时
+  idle_timeout: 300s               # 增加空闲超时
+  max_retries: 5                   # 增加重试次数
+  retry_backoff: 100ms             # 降低重试間隔
+  circuit_breaker_threshold: 10    # 增加熔断阈值
+  circuit_breaker_timeout: 60s     # 增加熔断超时
   
   # 缓存配置
   enable_cache: true
   cache_ttl: 5m
-  cache_max_size: 1000
+  cache_max_size: 10000            # 提升10倍缓存大小
   
   # 异步处理配置
   enable_async: true
-  async_worker_count: 10
-  async_queue_size: 1000
+  async_worker_count: 32           # 增加到32个工作协程
+  async_queue_size: 50000          # 提升50倍队列大小
 
 etcd:
   endpoints:
@@ -101,6 +101,9 @@ log:
   max_backups: 3
   max_age: 28
   compress: true
+  # 新增配置项
+  show_caller: true      # 是否显示代码行数
+  enable_trace_id: true  # 是否自动添加trace_id
 
 trace:
   service_name: "rpc-framework"

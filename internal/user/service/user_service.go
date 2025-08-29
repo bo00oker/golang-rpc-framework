@@ -46,17 +46,25 @@ func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserReque
 	ctx, span := s.tracer.StartSpan(ctx, "UserService.CreateUser")
 	defer span.End()
 
-	s.logger.Infof("Creating user: %s", req.Username)
+	// 使用新的带context的日志方法，自动添加trace_id
+	s.logger.WithFields(map[string]interface{}{
+		"username": req.Username,
+	}).InfoCtx(ctx, "Creating user")
 
 	// 验证请求参数
 	if err := s.validateCreateUserRequest(req); err != nil {
-		s.logger.Errorf("Invalid create user request: %v", err)
+		s.logger.WithFields(map[string]interface{}{
+			"error":    err.Error(),
+			"username": req.Username,
+		}).ErrorCtx(ctx, "Invalid create user request")
 		return nil, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
 	}
 
 	// 检查用户名是否已存在
 	if _, err := s.userRepo.GetByUsername(ctx, req.Username); err == nil {
-		s.logger.Warnf("User already exists: %s", req.Username)
+		s.logger.WithFields(map[string]interface{}{
+			"username": req.Username,
+		}).WarnCtx(ctx, "User already exists")
 		return nil, ErrUserExists
 	}
 
@@ -71,11 +79,17 @@ func (s *userService) CreateUser(ctx context.Context, req *model.CreateUserReque
 
 	createdUser, err := s.userRepo.Create(ctx, user)
 	if err != nil {
-		s.logger.Errorf("Failed to create user: %v", err)
+		s.logger.WithFields(map[string]interface{}{
+			"error":    err.Error(),
+			"username": req.Username,
+		}).ErrorCtx(ctx, "Failed to create user")
 		return nil, err
 	}
 
-	s.logger.Infof("User created successfully: ID=%d, Username=%s", createdUser.ID, createdUser.Username)
+	s.logger.WithFields(map[string]interface{}{
+		"user_id":  createdUser.ID,
+		"username": createdUser.Username,
+	}).InfoCtx(ctx, "User created successfully")
 	return createdUser, nil
 }
 
@@ -83,22 +97,24 @@ func (s *userService) GetUser(ctx context.Context, id int64) (*model.User, error
 	ctx, span := s.tracer.StartSpan(ctx, "UserService.GetUser")
 	defer span.End()
 
-	s.logger.Infof("Getting user: ID=%d", id)
+	s.logger.InfoCtx(ctx, "Getting user", "user_id", id)
 
 	if id <= 0 {
+		s.logger.ErrorCtx(ctx, "Invalid user ID", "user_id", id)
 		return nil, fmt.Errorf("%w: invalid user ID", ErrInvalidRequest)
 	}
 
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
+			s.logger.WarnCtx(ctx, "User not found", "user_id", id)
 			return nil, ErrUserNotFound
 		}
-		s.logger.Errorf("Failed to get user: %v", err)
+		s.logger.ErrorCtx(ctx, "Failed to get user", "error", err, "user_id", id)
 		return nil, err
 	}
 
-	s.logger.Infof("User retrieved successfully: ID=%d", id)
+	s.logger.InfoCtx(ctx, "User retrieved successfully", "user_id", id, "username", user.Username)
 	return user, nil
 }
 

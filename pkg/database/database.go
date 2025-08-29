@@ -31,13 +31,41 @@ type Database struct {
 
 // NewDatabase 创建数据库连接
 func NewDatabase(cfg *config.Config) (*Database, error) {
+	// 获取配置并设置默认值
+	driver := cfg.GetString("database.driver")
+	if driver == "" {
+		driver = "mysql"
+	}
+
+	dsn := cfg.GetString("database.dsn")
+
+	maxOpenConns := cfg.GetInt("database.max_open_conns")
+	if maxOpenConns <= 0 {
+		maxOpenConns = 100
+	}
+
+	maxIdleConns := cfg.GetInt("database.max_idle_conns")
+	if maxIdleConns <= 0 {
+		maxIdleConns = 10
+	}
+
+	connMaxLifetime := cfg.GetDuration("database.conn_max_lifetime")
+	if connMaxLifetime <= 0 {
+		connMaxLifetime = time.Hour
+	}
+
+	connMaxIdleTime := cfg.GetDuration("database.conn_max_idle_time")
+	if connMaxIdleTime <= 0 {
+		connMaxIdleTime = 30 * time.Minute
+	}
+
 	dbConfig := &DatabaseConfig{
-		Driver:          cfg.GetString("database.driver", "mysql"),
-		DSN:             cfg.GetString("database.dsn", ""),
-		MaxOpenConns:    cfg.GetInt("database.max_open_conns", 100),
-		MaxIdleConns:    cfg.GetInt("database.max_idle_conns", 10),
-		ConnMaxLifetime: cfg.GetDuration("database.conn_max_lifetime", time.Hour),
-		ConnMaxIdleTime: cfg.GetDuration("database.conn_max_idle_time", 30*time.Minute),
+		Driver:          driver,
+		DSN:             dsn,
+		MaxOpenConns:    maxOpenConns,
+		MaxIdleConns:    maxIdleConns,
+		ConnMaxLifetime: connMaxLifetime,
+		ConnMaxIdleTime: connMaxIdleTime,
 	}
 
 	if dbConfig.DSN == "" {

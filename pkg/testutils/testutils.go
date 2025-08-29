@@ -102,41 +102,43 @@ func getFreePort(t *testing.T) string {
 
 // MockRegistry 模拟注册中心
 type MockRegistry struct {
-	services map[string][]registry.ServiceInstance
+	services map[string][]registry.ServiceInfo
 }
 
 // NewMockRegistry 创建模拟注册中心
 func NewMockRegistry() *MockRegistry {
 	return &MockRegistry{
-		services: make(map[string][]registry.ServiceInstance),
+		services: make(map[string][]registry.ServiceInfo),
 	}
 }
 
 // Register 注册服务
-func (m *MockRegistry) Register(ctx context.Context, instance *registry.ServiceInstance) error {
-	if m.services[instance.ServiceName] == nil {
-		m.services[instance.ServiceName] = make([]registry.ServiceInstance, 0)
+func (m *MockRegistry) Register(ctx context.Context, instance *registry.ServiceInfo) error {
+	if m.services[instance.Name] == nil {
+		m.services[instance.Name] = make([]registry.ServiceInfo, 0)
 	}
-	m.services[instance.ServiceName] = append(m.services[instance.ServiceName], *instance)
+	m.services[instance.Name] = append(m.services[instance.Name], *instance)
 	return nil
 }
 
 // Deregister 注销服务
-func (m *MockRegistry) Deregister(ctx context.Context, instance *registry.ServiceInstance) error {
-	services := m.services[instance.ServiceName]
-	for i, svc := range services {
-		if svc.ID == instance.ID {
-			m.services[instance.ServiceName] = append(services[:i], services[i+1:]...)
-			break
+func (m *MockRegistry) Deregister(ctx context.Context, serviceID string) error {
+	// 找到对应的服务并删除
+	for serviceName, instances := range m.services {
+		for i, instance := range instances {
+			if instance.ID == serviceID {
+				m.services[serviceName] = append(instances[:i], instances[i+1:]...)
+				return nil
+			}
 		}
 	}
 	return nil
 }
 
 // Discover 发现服务
-func (m *MockRegistry) Discover(ctx context.Context, serviceName string) ([]*registry.ServiceInstance, error) {
+func (m *MockRegistry) Discover(ctx context.Context, serviceName string) ([]*registry.ServiceInfo, error) {
 	services := m.services[serviceName]
-	result := make([]*registry.ServiceInstance, len(services))
+	result := make([]*registry.ServiceInfo, len(services))
 	for i, svc := range services {
 		result[i] = &svc
 	}
@@ -144,8 +146,8 @@ func (m *MockRegistry) Discover(ctx context.Context, serviceName string) ([]*reg
 }
 
 // Watch 监听服务变化
-func (m *MockRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*registry.ServiceInstance, error) {
-	ch := make(chan []*registry.ServiceInstance, 1)
+func (m *MockRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*registry.ServiceInfo, error) {
+	ch := make(chan []*registry.ServiceInfo, 1)
 
 	// 发送初始服务列表
 	go func() {

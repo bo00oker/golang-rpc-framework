@@ -64,20 +64,70 @@ type RedisCache struct {
 
 // NewRedisCache 创建Redis缓存
 func NewRedisCache(cfg *config.Config) (*RedisCache, error) {
+	// 获取配置并设置默认值
+	cacheType := cfg.GetString("cache.type")
+	if cacheType == "" {
+		cacheType = "redis"
+	}
+
+	defaultTTL := cfg.GetDuration("cache.default_ttl")
+	if defaultTTL <= 0 {
+		defaultTTL = time.Hour
+	}
+
+	addr := cfg.GetString("cache.redis.addr")
+	if addr == "" {
+		addr = "localhost:6379"
+	}
+
+	password := cfg.GetString("cache.redis.password")
+
+	db := cfg.GetInt("cache.redis.db")
+	if db < 0 {
+		db = 0
+	}
+
+	poolSize := cfg.GetInt("cache.redis.pool_size")
+	if poolSize <= 0 {
+		poolSize = 10
+	}
+
+	minIdleConns := cfg.GetInt("cache.redis.min_idle_conns")
+	if minIdleConns <= 0 {
+		minIdleConns = 5
+	}
+
+	dialTimeout := cfg.GetDuration("cache.redis.dial_timeout")
+	if dialTimeout <= 0 {
+		dialTimeout = 5 * time.Second
+	}
+
+	readTimeout := cfg.GetDuration("cache.redis.read_timeout")
+	if readTimeout <= 0 {
+		readTimeout = 3 * time.Second
+	}
+
+	writeTimeout := cfg.GetDuration("cache.redis.write_timeout")
+	if writeTimeout <= 0 {
+		writeTimeout = 3 * time.Second
+	}
+
+	enableStats := cfg.GetBool("cache.enable_stats")
+
 	cacheConfig := &CacheConfig{
-		Type:       cfg.GetString("cache.type", "redis"),
-		DefaultTTL: cfg.GetDuration("cache.default_ttl", time.Hour),
+		Type:       cacheType,
+		DefaultTTL: defaultTTL,
 		Redis: RedisConfig{
-			Addr:         cfg.GetString("cache.redis.addr", "localhost:6379"),
-			Password:     cfg.GetString("cache.redis.password", ""),
-			DB:           cfg.GetInt("cache.redis.db", 0),
-			PoolSize:     cfg.GetInt("cache.redis.pool_size", 10),
-			MinIdleConns: cfg.GetInt("cache.redis.min_idle_conns", 5),
-			DialTimeout:  cfg.GetDuration("cache.redis.dial_timeout", 5*time.Second),
-			ReadTimeout:  cfg.GetDuration("cache.redis.read_timeout", 3*time.Second),
-			WriteTimeout: cfg.GetDuration("cache.redis.write_timeout", 3*time.Second),
+			Addr:         addr,
+			Password:     password,
+			DB:           db,
+			PoolSize:     poolSize,
+			MinIdleConns: minIdleConns,
+			DialTimeout:  dialTimeout,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
 		},
-		EnableStats: cfg.GetBool("cache.enable_stats", true),
+		EnableStats: enableStats,
 	}
 
 	rdb := redis.NewClient(&redis.Options{

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -67,13 +68,14 @@ type Options struct {
 	HealthCheckTimeout  time.Duration // 健康检查超时
 }
 
-// RateLimiter 限流器
+// RateLimiter 令牌桶限流器 - 优化算法
 type RateLimiter struct {
-	mu       sync.RWMutex
-	limit    int
-	tokens   int
-	lastTime time.Time
-	interval time.Duration
+	mu         sync.Mutex
+	limit      int       // 每秒令牌数
+	tokens     float64   // 当前令牌数
+	lastRefill time.Time // 上次补充时间
+	refillRate float64   // 补充速率（令牌/秒）
+	bucketSize int       // 桶容量
 }
 
 // ServerConnectionPool 服务器连接池
@@ -94,24 +96,29 @@ type ConnectionStats struct {
 	AccessCount  int64
 }
 
-// ServerMetrics 服务器指标
+// ServerMetrics 服务器指标 - 优化为原子操作
 type ServerMetrics struct {
-	mu                sync.RWMutex
-	requestCount      int64
-	errorCount        int64
-	activeConnections int64
-	responseTime      time.Duration
-	throughput        float64
-	latency           time.Duration
+	// 使用原子操作替代锁，提升并发性能
+	requestCount      int64 // atomic
+	errorCount        int64 // atomic
+	activeConnections int64 // atomic
+	// 非热点数据仍使用锁保护
+	mu           sync.RWMutex
+	responseTime time.Duration
+	throughput   float64
+	latency      time.Duration
 }
 
-// MemoryPool 内存池
+// MemoryPool 内存池 - 使用sync.Pool优化
 type MemoryPool struct {
-	mu        sync.RWMutex
-	buffers   chan []byte
-	size      int
-	maxSize   int
-	allocated int64
+	bufferPool  *sync.Pool // 使用sync.Pool提高性能
+	size        int
+	maxSize     int
+	allocated   int64        // 使用原子操作计数
+	bufferSizes []int        // 支持多种缓冲区大小
+	statsMu     sync.RWMutex // 统计信息锁
+	hits        int64        // 命中次数
+	misses      int64        // 未命中次数
 }
 
 // ServerAsyncProcessor 服务器异步处理器
@@ -163,12 +170,13 @@ func New(opts *Options) *Server {
 		streamInterceptors = append(streamInterceptors, interceptor.TraceStreamServerInterceptor(opts.Tracer))
 	}
 
-	// 添加限流拦截器
+	// 添加限流拦截器 - 优化的令牌桶限流器
 	rateLimiter := &RateLimiter{
-		limit:    opts.RateLimit,
-		tokens:   opts.RateLimit,
-		lastTime: time.Now(),
-		interval: time.Second,
+		limit:      opts.RateLimit,
+		tokens:     float64(opts.RateLimit),
+		lastRefill: time.Now(),
+		refillRate: float64(opts.RateLimit),
+		bucketSize: opts.RateLimit,
 	}
 	unaryInterceptors = append(unaryInterceptors, rateLimiter.UnaryInterceptor())
 	streamInterceptors = append(streamInterceptors, rateLimiter.StreamInterceptor())
@@ -211,18 +219,10 @@ func New(opts *Options) *Server {
 		stats:    make(map[string]*ConnectionStats),
 	}
 
-	// 创建内存池
+	// 创建内存池 - 使用sync.Pool优化
 	var memoryPool *MemoryPool
 	if opts.EnableMemoryPool {
-		memoryPool = &MemoryPool{
-			buffers: make(chan []byte, opts.MemoryPoolSize),
-			size:    opts.MemoryPoolSize,
-			maxSize: opts.MemoryPoolMaxSize,
-		}
-		// 预分配缓冲区
-		for i := 0; i < opts.MemoryPoolSize; i++ {
-			memoryPool.buffers <- make([]byte, 4096) // 4KB 默认大小
-		}
+		memoryPool = NewMemoryPool(opts.MemoryPoolSize, opts.MemoryPoolMaxSize)
 	}
 
 	// 创建异步处理器
@@ -271,25 +271,25 @@ func DefaultOptions() *Options {
 		MaxRecvMsgSize: 4 * 1024 * 1024,
 		MaxSendMsgSize: 4 * 1024 * 1024,
 
-		// 高并发配置
-		MaxConcurrentRequests: 1000,
+		// 高并发配置 - 优化后的默认值
+		MaxConcurrentRequests: 10000, // 提升10倍
 		RequestTimeout:        30 * time.Second,
-		MaxConnections:        1000,
-		ConnectionTimeout:     5 * time.Second,
-		KeepAliveTime:         30 * time.Second,
-		KeepAliveTimeout:      5 * time.Second,
-		RateLimit:             1000,
+		MaxConnections:        5000,             // 提升5倍
+		ConnectionTimeout:     3 * time.Second,  // 降低连接超时
+		KeepAliveTime:         60 * time.Second, // 增加保活时间
+		KeepAliveTimeout:      10 * time.Second, // 增加保活超时
+		RateLimit:             5000,             // 提升5倍
 		EnableMetrics:         true,
 
-		// 内存池配置
+		// 内存池配置 - 优化后的默认值
 		EnableMemoryPool:  true,
-		MemoryPoolSize:    1000,
-		MemoryPoolMaxSize: 10000,
+		MemoryPoolSize:    10000,  // 提升10倍
+		MemoryPoolMaxSize: 100000, // 提升10倍
 
-		// 异步处理配置
+		// 异步处理配置 - 优化后的默认值
 		EnableAsync:      true,
-		AsyncWorkerCount: 10,
-		AsyncQueueSize:   1000,
+		AsyncWorkerCount: 32,    // 增加到32个工作协程
+		AsyncQueueSize:   50000, // 提升50倍
 
 		// 健康检查配置
 		EnableHealthCheck:   true,
@@ -428,42 +428,45 @@ func (rl *RateLimiter) StreamInterceptor() grpc.StreamServerInterceptor {
 	}
 }
 
-// Allow 检查是否允许请求
+// Allow 检查是否允许请求 - 优化的令牌桶算法
 func (rl *RateLimiter) Allow() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
 	now := time.Now()
-	elapsed := now.Sub(rl.lastTime)
+	elapsed := now.Sub(rl.lastRefill).Seconds()
 
-	// 计算需要补充的令牌
-	tokensToAdd := int(elapsed / rl.interval)
+	// 计算需要补充的令牌数
+	tokensToAdd := elapsed * rl.refillRate
 	if tokensToAdd > 0 {
-		rl.tokens = min(rl.limit, rl.tokens+tokensToAdd)
-		rl.lastTime = now
+		rl.tokens = math.Min(float64(rl.bucketSize), rl.tokens+tokensToAdd)
+		rl.lastRefill = now
 	}
 
-	if rl.tokens > 0 {
-		rl.tokens--
+	// 检查是否有可用令牌
+	if rl.tokens >= 1.0 {
+		rl.tokens -= 1.0
 		return true
 	}
 
 	return false
 }
 
-// UnaryInterceptor 指标收集 unary 拦截器
+// UnaryInterceptor 指标收集 unary 拦截器 - 优化锁使用
 func (sm *ServerMetrics) UnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		start := time.Now()
 
-		sm.mu.Lock()
+		// 使用原子操作增加计数器，无需锁
 		atomic.AddInt64(&sm.requestCount, 1)
 		atomic.AddInt64(&sm.activeConnections, 1)
-		sm.mu.Unlock()
 
 		defer func() {
-			sm.mu.Lock()
+			// 减少活跃连接数
 			atomic.AddInt64(&sm.activeConnections, -1)
+
+			// 只有非热点数据才使用锁
+			sm.mu.Lock()
 			sm.responseTime = time.Since(start)
 			sm.mu.Unlock()
 		}()
@@ -471,28 +474,29 @@ func (sm *ServerMetrics) UnaryInterceptor() grpc.UnaryServerInterceptor {
 		resp, err := handler(ctx, req)
 
 		if err != nil {
-			sm.mu.Lock()
+			// 使用原子操作增加错误计数，无需锁
 			atomic.AddInt64(&sm.errorCount, 1)
-			sm.mu.Unlock()
 		}
 
 		return resp, err
 	}
 }
 
-// StreamInterceptor 指标收集 stream 拦截器
+// StreamInterceptor 指标收集 stream 拦截器 - 优化锁使用
 func (sm *ServerMetrics) StreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		start := time.Now()
 
-		sm.mu.Lock()
+		// 使用原子操作增加计数器，无需锁
 		atomic.AddInt64(&sm.requestCount, 1)
 		atomic.AddInt64(&sm.activeConnections, 1)
-		sm.mu.Unlock()
 
 		defer func() {
-			sm.mu.Lock()
+			// 减少活跃连接数
 			atomic.AddInt64(&sm.activeConnections, -1)
+
+			// 只有非热点数据才使用锁
+			sm.mu.Lock()
 			sm.responseTime = time.Since(start)
 			sm.mu.Unlock()
 		}()
@@ -500,9 +504,8 @@ func (sm *ServerMetrics) StreamInterceptor() grpc.StreamServerInterceptor {
 		err := handler(srv, ss)
 
 		if err != nil {
-			sm.mu.Lock()
+			// 使用原子操作增加错误计数，无需锁
 			atomic.AddInt64(&sm.errorCount, 1)
-			sm.mu.Unlock()
 		}
 
 		return err
@@ -567,47 +570,6 @@ func (scp *ServerConnectionPool) GetStats() map[string]interface{} {
 	}
 
 	return stats
-}
-
-// Get 从内存池获取缓冲区
-func (mp *MemoryPool) Get() []byte {
-	select {
-	case buf := <-mp.buffers:
-		atomic.AddInt64(&mp.allocated, 1)
-		return buf
-	default:
-		atomic.AddInt64(&mp.allocated, 1)
-		return make([]byte, 4096)
-	}
-}
-
-// Put 将缓冲区放回内存池
-func (mp *MemoryPool) Put(buf []byte) {
-	if len(buf) != 4096 { // 只接受标准大小的缓冲区
-		return
-	}
-
-	select {
-	case mp.buffers <- buf:
-		atomic.AddInt64(&mp.allocated, -1)
-	default:
-		// 池已满，丢弃缓冲区
-		atomic.AddInt64(&mp.allocated, -1)
-	}
-}
-
-// GetStats 获取内存池统计信息
-func (mp *MemoryPool) GetStats() map[string]interface{} {
-	mp.mu.RLock()
-	defer mp.mu.RUnlock()
-
-	return map[string]interface{}{
-		"pool_size":   mp.size,
-		"max_size":    mp.maxSize,
-		"allocated":   atomic.LoadInt64(&mp.allocated),
-		"available":   len(mp.buffers),
-		"utilization": float64(len(mp.buffers)) / float64(mp.size),
-	}
 }
 
 // Start 启动异步处理器
@@ -835,4 +797,112 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// NewMemoryPool 创建新的内存池 - 使用sync.Pool优化
+func NewMemoryPool(size, maxSize int) *MemoryPool {
+	mp := &MemoryPool{
+		size:        size,
+		maxSize:     maxSize,
+		bufferSizes: []int{1024, 4096, 16384, 65536}, // 1KB, 4KB, 16KB, 64KB
+	}
+
+	// 初始化sync.Pool
+	mp.bufferPool = &sync.Pool{
+		New: func() interface{} {
+			// 默认创建4KB缓冲区
+			return make([]byte, 4096)
+		},
+	}
+
+	return mp
+}
+
+// Get 从内存池获取缓冲区 - 优化版本
+func (mp *MemoryPool) Get() []byte {
+	if mp == nil || mp.bufferPool == nil {
+		return make([]byte, 4096)
+	}
+
+	// 从sync.Pool获取缓冲区
+	buf := mp.bufferPool.Get().([]byte)
+
+	// 更新统计信息
+	atomic.AddInt64(&mp.allocated, 1)
+	atomic.AddInt64(&mp.hits, 1)
+
+	return buf
+}
+
+// GetWithSize 获取指定大小的缓冲区
+func (mp *MemoryPool) GetWithSize(size int) []byte {
+	if mp == nil {
+		return make([]byte, size)
+	}
+
+	// 找到合适的缓冲区大小
+	bufferSize := mp.findBestSize(size)
+	if bufferSize == 4096 {
+		// 使用池中的标准大小
+		return mp.Get()
+	}
+
+	// 对于非标准大小，直接分配
+	atomic.AddInt64(&mp.misses, 1)
+	return make([]byte, bufferSize)
+}
+
+// Put 将缓冲区放回内存池 - 优化版本
+func (mp *MemoryPool) Put(buf []byte) {
+	if mp == nil || mp.bufferPool == nil || len(buf) != 4096 {
+		// 只回收4KB的标准缓冲区
+		return
+	}
+
+	// 重置缓冲区（可选，取决于使用场景）
+	for i := range buf {
+		buf[i] = 0
+	}
+
+	// 放回sync.Pool
+	mp.bufferPool.Put(buf)
+	atomic.AddInt64(&mp.allocated, -1)
+}
+
+// findBestSize 找到最适合的缓冲区大小
+func (mp *MemoryPool) findBestSize(size int) int {
+	for _, bufferSize := range mp.bufferSizes {
+		if size <= bufferSize {
+			return bufferSize
+		}
+	}
+	// 如果超过最大预定义大小，返回请求的大小
+	return size
+}
+
+// GetStats 获取内存池统计信息 - 优化版本
+func (mp *MemoryPool) GetStats() map[string]interface{} {
+	if mp == nil {
+		return nil
+	}
+
+	allocated := atomic.LoadInt64(&mp.allocated)
+	hits := atomic.LoadInt64(&mp.hits)
+	misses := atomic.LoadInt64(&mp.misses)
+	total := hits + misses
+
+	var hitRate float64
+	if total > 0 {
+		hitRate = float64(hits) / float64(total)
+	}
+
+	return map[string]interface{}{
+		"pool_size":    mp.size,
+		"max_size":     mp.maxSize,
+		"allocated":    allocated,
+		"hits":         hits,
+		"misses":       misses,
+		"hit_rate":     hitRate,
+		"buffer_sizes": mp.bufferSizes,
+	}
 }

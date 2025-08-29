@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -157,52 +158,90 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
-// RateLimiter 简单的限流器
+// RateLimiter 令牌桶限流器 - 优化版本
 type RateLimiter struct {
-	requests map[string][]time.Time
-	limit    int
-	window   time.Duration
+	mu              sync.Mutex
+	clientLimiters  map[string]*ClientLimiter
+	limit           int           // 每秒令牌数
+	window          time.Duration // 时间窗口
+	cleanupInterval time.Duration // 清理间隔
+	lastCleanup     time.Time
 }
 
-// NewRateLimiter 创建限流器
+// ClientLimiter 客户端限流器
+type ClientLimiter struct {
+	tokens     float64   // 当前令牌数
+	lastRefill time.Time // 上次补充时间
+	refillRate float64   // 补充速率（令牌/秒）
+	bucketSize int       // 桶容量
+}
+
+// NewRateLimiter 创建令牌桶限流器
 func NewRateLimiter(limit int) *RateLimiter {
 	return &RateLimiter{
-		requests: make(map[string][]time.Time),
-		limit:    limit,
-		window:   time.Minute, // 1分钟窗口
+		clientLimiters:  make(map[string]*ClientLimiter),
+		limit:           limit,
+		window:          time.Minute,
+		cleanupInterval: 5 * time.Minute, // 每5分钟清理一次
+		lastCleanup:     time.Now(),
 	}
 }
 
-// Allow 检查是否允许请求
+// Allow 检查是否允许请求 - 优化的令牌桶算法
 func (rl *RateLimiter) Allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
 	now := time.Now()
 
-	// 获取该key的请求历史
-	requests, exists := rl.requests[key]
+	// 定期清理过期的客户端限流器
+	if now.Sub(rl.lastCleanup) > rl.cleanupInterval {
+		rl.cleanup(now)
+		rl.lastCleanup = now
+	}
+
+	// 获取或创建客户端限流器
+	clientLimiter, exists := rl.clientLimiters[key]
 	if !exists {
-		rl.requests[key] = []time.Time{now}
+		clientLimiter = &ClientLimiter{
+			tokens:     float64(rl.limit),
+			lastRefill: now,
+			refillRate: float64(rl.limit) / 60.0, // 每秒补充速率
+			bucketSize: rl.limit,
+		}
+		rl.clientLimiters[key] = clientLimiter
+	}
+
+	// 计算需要补充的令牌数
+	elapsed := now.Sub(clientLimiter.lastRefill).Seconds()
+	tokensToAdd := elapsed * clientLimiter.refillRate
+	if tokensToAdd > 0 {
+		if clientLimiter.tokens+tokensToAdd > float64(clientLimiter.bucketSize) {
+			clientLimiter.tokens = float64(clientLimiter.bucketSize)
+		} else {
+			clientLimiter.tokens += tokensToAdd
+		}
+		clientLimiter.lastRefill = now
+	}
+
+	// 检查是否有可用令牌
+	if clientLimiter.tokens >= 1.0 {
+		clientLimiter.tokens -= 1.0
 		return true
 	}
 
-	// 清理过期的请求记录
-	cutoff := now.Add(-rl.window)
-	validRequests := make([]time.Time, 0)
-	for _, req := range requests {
-		if req.After(cutoff) {
-			validRequests = append(validRequests, req)
+	return false
+}
+
+// cleanup 清理过期的客户端限流器
+func (rl *RateLimiter) cleanup(now time.Time) {
+	cutoff := now.Add(-2 * rl.window) // 清理2个窗口以外的数据
+
+	for key, limiter := range rl.clientLimiters {
+		if limiter.lastRefill.Before(cutoff) {
+			delete(rl.clientLimiters, key)
 		}
 	}
-
-	// 检查是否超过限制
-	if len(validRequests) >= rl.limit {
-		return false
-	}
-
-	// 添加当前请求
-	validRequests = append(validRequests, now)
-	rl.requests[key] = validRequests
-
-	return true
 }
 
 // handleHealth 健康检查处理器
