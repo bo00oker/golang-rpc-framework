@@ -1,5 +1,4 @@
 package repository
-package repository
 
 import (
 	"context"
@@ -102,7 +101,7 @@ func (r *memoryOrderRepository) Update(ctx context.Context, order *model.Order) 
 	if order.Description != "" {
 		existingOrder.Description = order.Description
 	}
-	
+
 	existingOrder.UpdatedAt = time.Now()
 
 	return r.copyOrder(existingOrder), nil
@@ -134,12 +133,12 @@ func (r *memoryOrderRepository) List(ctx context.Context, req *model.ListOrdersR
 		if req.UserID > 0 && order.UserID != req.UserID {
 			continue
 		}
-		
+
 		// 状态过滤
 		if req.Status != "" && order.Status != req.Status {
 			continue
 		}
-		
+
 		filteredOrders = append(filteredOrders, r.copyOrder(order))
 	}
 
@@ -192,7 +191,7 @@ func (r *memoryOrderRepository) copyOrder(order *model.Order) *model.Order {
 			Quantity:    item.Quantity,
 		})
 	}
-	
+
 	return &model.Order{
 		ID:          order.ID,
 		UserID:      order.UserID,

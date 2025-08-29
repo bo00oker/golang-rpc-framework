@@ -1,5 +1,4 @@
 package repository
-package repository
 
 import (
 	"context"
@@ -12,9 +11,9 @@ import (
 )
 
 var (
-	ErrUserNotFound     = errors.New("user not found")
-	ErrUserExists       = errors.New("user already exists")
-	ErrInvalidUserID    = errors.New("invalid user ID")
+	ErrUserNotFound  = errors.New("user not found")
+	ErrUserExists    = errors.New("user already exists")
+	ErrInvalidUserID = errors.New("invalid user ID")
 )
 
 // UserRepository 用户仓储接口
@@ -196,7 +195,7 @@ func (r *memoryUserRepository) List(ctx context.Context, req *model.ListUsersReq
 				continue
 			}
 		}
-		
+
 		// 创建用户副本
 		filteredUsers = append(filteredUsers, &model.User{
 			ID:        user.ID,

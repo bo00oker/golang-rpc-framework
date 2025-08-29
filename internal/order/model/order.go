@@ -1,5 +1,4 @@
 package model
-package model
 
 import (
 	"fmt"
@@ -16,14 +15,14 @@ const (
 
 // Order 订单领域模型
 type Order struct {
-	ID          int64     `json:"id"`
-	UserID      int64     `json:"user_id"`
-	OrderNo     string    `json:"order_no"`
-	Amount      float64   `json:"amount"`
-	Status      string    `json:"status"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64        `json:"id"`
+	UserID      int64        `json:"user_id"`
+	OrderNo     string       `json:"order_no"`
+	Amount      float64      `json:"amount"`
+	Status      string       `json:"status"`
+	Description string       `json:"description"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
 	Items       []*OrderItem `json:"items,omitempty"`
 }
 

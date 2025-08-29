@@ -1,5 +1,4 @@
 package handler
-package handler
 
 import (
 	"context"
@@ -58,11 +57,11 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *order.CreateOrderRe
 	createdOrder, err := h.orderService.CreateOrder(ctx, createReq)
 	if err != nil {
 		h.logger.Errorf("Failed to create order: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -82,7 +81,7 @@ func (h *OrderHandler) GetOrder(ctx context.Context, req *order.GetOrderRequest)
 	foundOrder, err := h.orderService.GetOrder(ctx, req.OrderId)
 	if err != nil {
 		h.logger.Errorf("Failed to get order: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -91,7 +90,7 @@ func (h *OrderHandler) GetOrder(ctx context.Context, req *order.GetOrderRequest)
 				Message: "订单不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -119,7 +118,7 @@ func (h *OrderHandler) UpdateOrder(ctx context.Context, req *order.UpdateOrderRe
 	updatedOrder, err := h.orderService.UpdateOrder(ctx, updateReq)
 	if err != nil {
 		h.logger.Errorf("Failed to update order: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -128,7 +127,7 @@ func (h *OrderHandler) UpdateOrder(ctx context.Context, req *order.UpdateOrderRe
 				Message: "订单不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -148,7 +147,7 @@ func (h *OrderHandler) DeleteOrder(ctx context.Context, req *order.DeleteOrderRe
 	err := h.orderService.DeleteOrder(ctx, req.OrderId)
 	if err != nil {
 		h.logger.Errorf("Failed to delete order: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -158,7 +157,7 @@ func (h *OrderHandler) DeleteOrder(ctx context.Context, req *order.DeleteOrderRe
 				Message: "订单不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -194,11 +193,11 @@ func (h *OrderHandler) ListOrders(ctx context.Context, req *order.ListOrdersRequ
 	response, err := h.orderService.ListOrders(ctx, listReq)
 	if err != nil {
 		h.logger.Errorf("Failed to list orders: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -236,11 +235,11 @@ func (h *OrderHandler) GetOrdersByUser(ctx context.Context, req *order.GetOrders
 	response, err := h.orderService.GetOrdersByUser(ctx, req.UserId, page, pageSize)
 	if err != nil {
 		h.logger.Errorf("Failed to get orders by user: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 

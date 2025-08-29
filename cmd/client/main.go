@@ -1,4 +1,3 @@
-package client
 package main
 
 import (
@@ -232,7 +231,7 @@ func testCrossServiceScenarios(cli *client.Client, nacosReg registry.Registry, t
 
 	// 跨服务测试场景：创建用户后创建订单
 	ctx := context.Background()
-	
+
 	// 1. 创建用户
 	log.Info("Step 1: Creating a new user...")
 	userID, err := userClient.CreateTestUser(ctx, "cross_service_user", "cross@example.com")

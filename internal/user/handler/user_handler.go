@@ -1,5 +1,4 @@
 package handler
-package handler
 
 import (
 	"context"
@@ -49,7 +48,7 @@ func (h *UserHandler) CreateUser(ctx context.Context, req *user.CreateUserReques
 	createdUser, err := h.userService.CreateUser(ctx, createReq)
 	if err != nil {
 		h.logger.Errorf("Failed to create user: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -58,7 +57,7 @@ func (h *UserHandler) CreateUser(ctx context.Context, req *user.CreateUserReques
 				Message: "用户名已存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -78,7 +77,7 @@ func (h *UserHandler) GetUser(ctx context.Context, req *user.GetUserRequest) (*u
 	foundUser, err := h.userService.GetUser(ctx, req.UserId)
 	if err != nil {
 		h.logger.Errorf("Failed to get user: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -87,7 +86,7 @@ func (h *UserHandler) GetUser(ctx context.Context, req *user.GetUserRequest) (*u
 				Message: "用户不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -117,7 +116,7 @@ func (h *UserHandler) UpdateUser(ctx context.Context, req *user.UpdateUserReques
 	updatedUser, err := h.userService.UpdateUser(ctx, updateReq)
 	if err != nil {
 		h.logger.Errorf("Failed to update user: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -126,7 +125,7 @@ func (h *UserHandler) UpdateUser(ctx context.Context, req *user.UpdateUserReques
 				Message: "用户不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -146,7 +145,7 @@ func (h *UserHandler) DeleteUser(ctx context.Context, req *user.DeleteUserReques
 	err := h.userService.DeleteUser(ctx, req.UserId)
 	if err != nil {
 		h.logger.Errorf("Failed to delete user: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
@@ -156,7 +155,7 @@ func (h *UserHandler) DeleteUser(ctx context.Context, req *user.DeleteUserReques
 				Message: "用户不存在",
 			}, nil
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 
@@ -191,11 +190,11 @@ func (h *UserHandler) ListUsers(ctx context.Context, req *user.ListUsersRequest)
 	response, err := h.userService.ListUsers(ctx, listReq)
 	if err != nil {
 		h.logger.Errorf("Failed to list users: %v", err)
-		
+
 		if errors.Is(err, service.ErrInvalidRequest) {
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid request: %v", err)
 		}
-		
+
 		return nil, status.Errorf(codes.Internal, "Internal error: %v", err)
 	}
 

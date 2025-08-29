@@ -1,5 +1,4 @@
 package service
-package service
 
 import (
 	"context"
@@ -69,9 +68,9 @@ func (s *orderService) CreateOrder(ctx context.Context, req *model.CreateOrderRe
 		return nil, err
 	}
 
-	s.logger.Infof("Order created successfully: ID=%d, UserID=%d, OrderNo=%s, Amount=%.2f", 
+	s.logger.Infof("Order created successfully: ID=%d, UserID=%d, OrderNo=%s, Amount=%.2f",
 		createdOrder.ID, createdOrder.UserID, createdOrder.OrderNo, createdOrder.Amount)
-	
+
 	return createdOrder, nil
 }
 
@@ -164,7 +163,7 @@ func (s *orderService) ListOrders(ctx context.Context, req *model.ListOrdersRequ
 	ctx, span := s.tracer.StartSpan(ctx, "OrderService.ListOrders")
 	defer span.End()
 
-	s.logger.Infof("Listing orders: page=%d, page_size=%d, user_id=%d, status=%s", 
+	s.logger.Infof("Listing orders: page=%d, page_size=%d, user_id=%d, status=%s",
 		req.Page, req.PageSize, req.UserID, req.Status)
 
 	// 验证请求参数
@@ -221,7 +220,7 @@ func (s *orderService) validateCreateOrderRequest(req *model.CreateOrderRequest)
 	if len(req.Items) == 0 {
 		return errors.New("order items are required")
 	}
-	
+
 	// 验证订单项
 	for i, item := range req.Items {
 		if item.ProductName == "" {
@@ -234,7 +233,7 @@ func (s *orderService) validateCreateOrderRequest(req *model.CreateOrderRequest)
 			return fmt.Errorf("price must be greater than or equal to 0 for item %d", i+1)
 		}
 	}
-	
+
 	return nil
 }
 

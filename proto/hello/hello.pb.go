@@ -7,12 +7,11 @@
 package hello
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -38,8 +37,12 @@ func (x *HelloRequest) Reset() {
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *HelloRequest) String() string { return protoimpl.X.MessageStringOf(x) }
-func (*HelloRequest) ProtoMessage()    {}
+func (x *HelloRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HelloRequest) ProtoMessage() {}
+
 func (x *HelloRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_hello_proto_msgTypes[0]
 	if x != nil {
@@ -52,15 +55,18 @@ func (x *HelloRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
+// Deprecated: Use HelloRequest.ProtoReflect.Descriptor instead.
 func (*HelloRequest) Descriptor() ([]byte, []int) {
 	return file_proto_hello_proto_rawDescGZIP(), []int{0}
 }
+
 func (x *HelloRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
+
 func (x *HelloRequest) GetMessage() string {
 	if x != nil {
 		return x.Message
@@ -84,8 +90,12 @@ func (x *HelloResponse) Reset() {
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *HelloResponse) String() string { return protoimpl.X.MessageStringOf(x) }
-func (*HelloResponse) ProtoMessage()    {}
+func (x *HelloResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HelloResponse) ProtoMessage() {}
+
 func (x *HelloResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_hello_proto_msgTypes[1]
 	if x != nil {
@@ -98,15 +108,18 @@ func (x *HelloResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
+// Deprecated: Use HelloResponse.ProtoReflect.Descriptor instead.
 func (*HelloResponse) Descriptor() ([]byte, []int) {
 	return file_proto_hello_proto_rawDescGZIP(), []int{1}
 }
+
 func (x *HelloResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
+
 func (x *HelloResponse) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
@@ -117,13 +130,18 @@ func (x *HelloResponse) GetTimestamp() int64 {
 var File_proto_hello_proto protoreflect.FileDescriptor
 
 const file_proto_hello_proto_rawDesc = "" +
-	"\n\x11proto/hello.proto\x12\x05hello" +
-	"\"<\n\fHelloRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n\amessage\x18\x02 \x01(\tR\amessage" +
-	"\"G\n\rHelloResponse\x12\x18\n\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n\ttimestamp\x18\x02 \x01(\x03R\ttimestamp" +
-	"2\xcc\x01\n\fHelloService\x125\n\bSayHello\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse" +
-	"\x12=\n\x0eSayHelloStream\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse0\x01" +
-	"\x12F\n\x15SayHelloBidirectional\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse(\x010\x01" +
-	"B+Z)github.com/rpc-framework/core/proto/hello"
+	"\n" +
+	"\x11proto/hello.proto\x12\x05hello\"<\n" +
+	"\fHelloRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"G\n" +
+	"\rHelloResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n" +
+	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp2\xcc\x01\n" +
+	"\fHelloService\x125\n" +
+	"\bSayHello\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse\x12=\n" +
+	"\x0eSayHelloStream\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse0\x01\x12F\n" +
+	"\x15SayHelloBidirectional\x12\x13.hello.HelloRequest\x1a\x14.hello.HelloResponse(\x010\x01B+Z)github.com/rpc-framework/core/proto/hellob\x06proto3"
 
 var (
 	file_proto_hello_proto_rawDescOnce sync.Once
@@ -138,14 +156,22 @@ func file_proto_hello_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_hello_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_proto_hello_proto_goTypes = []any{(*HelloRequest)(nil), (*HelloResponse)(nil)}
+var file_proto_hello_proto_goTypes = []any{
+	(*HelloRequest)(nil),  // 0: hello.HelloRequest
+	(*HelloResponse)(nil), // 1: hello.HelloResponse
+}
 var file_proto_hello_proto_depIdxs = []int32{
-	0,
-	0,
-	0,
-	1,
-	1,
-	1,
+	0, // 0: hello.HelloService.SayHello:input_type -> hello.HelloRequest
+	0, // 1: hello.HelloService.SayHelloStream:input_type -> hello.HelloRequest
+	0, // 2: hello.HelloService.SayHelloBidirectional:input_type -> hello.HelloRequest
+	1, // 3: hello.HelloService.SayHello:output_type -> hello.HelloResponse
+	1, // 4: hello.HelloService.SayHelloStream:output_type -> hello.HelloResponse
+	1, // 5: hello.HelloService.SayHelloBidirectional:output_type -> hello.HelloResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_proto_hello_proto_init() }
