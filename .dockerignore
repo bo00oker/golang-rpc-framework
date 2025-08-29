@@ -1,0 +1,16 @@
+# 添加到.gitignore的Docker相关条目
+
+# Docker相关
+docker/mysql/data/
+docker/redis/data/
+docker/nacos/data/
+docker/grafana/data/
+docker/prometheus/data/
+logs/
+*.log
+
+# 备份文件
+backup/
+
+# 环境文件（可选，根据安全需求）
+# .env

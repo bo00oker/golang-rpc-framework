@@ -1,0 +1,168 @@
+# Docker 环境专用配置文件
+# API Gateway配置
+gateway:
+  port: 8080
+  read_timeout: 15s
+  write_timeout: 15s
+  enable_cors: true
+  enable_auth: true
+  enable_metrics: true
+  enable_rate_limit: true
+  rate_limit: 5000
+
+# 注册中心类型配置 - Docker环境使用Nacos
+registry:
+  type: "nacos"
+
+server:
+  address: ":50051"
+  port: 50051
+  
+  # 高并发优化配置
+  max_concurrent_requests: 10000
+  request_timeout: 30s
+  max_connections: 5000
+  connection_timeout: 3s
+  keep_alive_time: 60s
+  keep_alive_timeout: 10s
+  rate_limit: 5000
+  enable_metrics: true
+  
+  # 内存池配置
+  enable_memory_pool: true
+  memory_pool_size: 10000
+  memory_pool_max_size: 100000
+  
+  # 异步处理配置
+  enable_async: true
+  async_worker_count: 32
+  async_queue_size: 50000
+  
+  # 健康检查配置
+  enable_health_check: true
+  health_check_interval: 30s
+  health_check_timeout: 5s
+
+client:
+  timeout: 30s
+  keep_alive: 30s
+  max_recv_msg_size: 4194304  # 4MB
+  max_send_msg_size: 4194304  # 4MB
+  retry_attempts: 3
+  retry_delay: 1s
+  load_balance_type: "round_robin"
+  
+  # 高并发优化配置
+  max_connections: 500
+  max_idle_conns: 100
+  conn_timeout: 3s
+  idle_timeout: 300s
+  max_retries: 5
+  retry_backoff: 100ms
+  circuit_breaker_threshold: 10
+  circuit_breaker_timeout: 60s
+  
+  # 缓存配置
+  enable_cache: true
+  cache_ttl: 5m
+  cache_max_size: 10000
+  
+  # 异步处理配置
+  enable_async: true
+  async_worker_count: 32
+  async_queue_size: 50000
+
+# Docker环境的Nacos配置
+nacos:
+  server_addr: "nacos:8848"  # 使用容器名称
+  namespace: "public"
+  group: "DEFAULT_GROUP"
+  timeout: 10s
+  username: "nacos"
+  password: "nacos"
+
+# Docker环境的NATS配置
+nats:
+  url: "nats://nats:4222"
+  timeout: 10s
+  username: ""
+  password: ""
+
+log:
+  level: "info"
+  format: "json"
+  output: "file"
+  filename: "logs/app.log"
+  max_size: 100
+  max_backups: 3
+  max_age: 28
+  compress: true
+  show_caller: true
+  enable_trace_id: true
+
+trace:
+  service_name: "rpc-framework"
+  service_version: "v1.0.0"
+  environment: "docker"
+  jaeger_endpoint: "http://jaeger:14268/api/traces"  # 使用容器名称
+  sample_rate: 1.0
+  enable_console: true
+
+# Docker环境的数据库配置
+database:
+  driver: "mysql"
+  dsn: "rpc_user:rpc_pass123@tcp(mysql:3306)/rpc_framework?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  conn_max_idle_time: 30m
+
+# Docker环境的缓存配置
+cache:
+  type: "redis"
+  default_ttl: 1h
+  max_size: 1000
+  enable_stats: true
+  redis:
+    addr: "redis:6379"  # 使用容器名称
+    password: ""
+    db: 0
+    pool_size: 10
+    min_idle_conns: 5
+    dial_timeout: 5s
+    read_timeout: 3s
+    write_timeout: 3s
+
+# 安全配置
+security:
+  jwt_secret: "your-docker-secret-key-here"
+  token_expiry: 1h
+  refresh_expiry: 24h
+  issuer: "rpc-framework"
+  enable_tls: false
+  cert_file: "./certs/server.crt"
+  key_file: "./certs/server.key"
+
+# 指标监控配置
+metrics:
+  enable: true
+  port: 9090
+  path: "/metrics"
+  namespace: "rpc_framework"
+  subsystem: "server"
+
+# 健康检查配置
+health:
+  enable: true
+  port: 8080
+  endpoint: "/health"
+
+# Docker环境测试配置
+test:
+  enable_integration_tests: true
+  test_db_dsn: "rpc_user:rpc_pass123@tcp(mysql:3306)/rpc_framework_test?charset=utf8mb4&parseTime=True&loc=Local"
+  load_test:
+    duration: 30s
+    concurrency: 50
+    requests_per_sec: 100
+    ramp_up_time: 5s

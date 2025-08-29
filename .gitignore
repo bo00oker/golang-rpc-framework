@@ -60,3 +60,15 @@ coverage.html
 # Build output
 dist/
 build/
+
+# Docker related
+docker/mysql/data/
+docker/redis/data/
+docker/nacos/data/
+docker/grafana/data/
+docker/prometheus/data/
+backup/
+
+# Keep .env as it contains default values
+# Uncomment the line below if you have sensitive data in .env
+# .env

@@ -1,0 +1,331 @@
+version: '3.8'
+
+# 自定义网络
+networks:
+  rpc-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# 数据卷
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  nacos_data:
+    driver: local
+  jaeger_data:
+    driver: local
+  logs:
+    driver: local
+
+services:
+  # =======================
+  # 基础设施服务
+  # =======================
+  
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    platform: linux/amd64
+    container_name: rpc-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-rpc_framework}
+      MYSQL_USER: ${MYSQL_USER:-rpc_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rpc_pass}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+      - ./docker/mysql/conf:/etc/mysql/conf.d
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: rpc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.11
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Nacos 注册中心
+  nacos:
+    image: nacos/nacos-server:v2.2.3
+    platform: linux/amd64
+    container_name: rpc-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: ${NACOS_DB:-nacos}
+      MYSQL_SERVICE_USER: ${MYSQL_USER:-rpc_user}
+      MYSQL_SERVICE_PASSWORD: ${MYSQL_PASSWORD:-rpc_pass}
+      NACOS_AUTH_ENABLE: true
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-SecretKey012345678901234567890123456789012345678901234567890123456789}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-nacos}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      JVM_XMS: 512m
+      JVM_XMX: 512m
+      JVM_XMN: 256m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos_data:/home/nacos/data
+      - ./docker/nacos/logs:/home/nacos/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.12
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Jaeger 链路追踪
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: rpc-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # HTTP collector
+      - "6831:6831/udp"  # UDP collector
+      - "6832:6832/udp"  # UDP collector
+    volumes:
+      - jaeger_data:/tmp
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.13
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:16686/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus 监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rpc-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./docker/prometheus/data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.14
+
+  # Grafana 可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rpc-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/grafana/data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.15
+
+  # =======================
+  # 应用服务
+  # =======================
+
+  # 用户服务
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.user
+    container_name: rpc-user-service
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=user-service
+      - NACOS_SERVER_ADDR=nacos:8848
+      - NACOS_USERNAME=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - NACOS_PASSWORD=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - MYSQL_DSN=${MYSQL_USER:-rpc_user}:${MYSQL_PASSWORD:-rpc_pass}@tcp(mysql:3306)/${MYSQL_DATABASE:-rpc_framework}?charset=utf8mb4&parseTime=True&loc=Local
+      - REDIS_ADDR=redis:6379
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    ports:
+      - "50051:50051"
+      - "9001:9090"  # Metrics port
+    volumes:
+      - logs:/app/logs
+      - ./docker/configs/app-docker.yaml:/app/configs/app.yaml
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.21
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "user-service"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 订单服务
+  order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.order
+    container_name: rpc-order-service
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=order-service
+      - NACOS_SERVER_ADDR=nacos:8848
+      - NACOS_USERNAME=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - NACOS_PASSWORD=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - MYSQL_DSN=${MYSQL_USER:-rpc_user}:${MYSQL_PASSWORD:-rpc_pass}@tcp(mysql:3306)/${MYSQL_DATABASE:-rpc_framework}?charset=utf8mb4&parseTime=True&loc=Local
+      - REDIS_ADDR=redis:6379
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    ports:
+      - "50052:50052"
+      - "9002:9090"  # Metrics port
+    volumes:
+      - logs:/app/logs
+      - ./docker/configs/app-docker.yaml:/app/configs/app.yaml
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.22
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "order-service"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API 网关
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: rpc-gateway
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=gateway
+      - NACOS_SERVER_ADDR=nacos:8848
+      - NACOS_USERNAME=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - NACOS_PASSWORD=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - REDIS_ADDR=redis:6379
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+    ports:
+      - "8080:8080"
+      - "9003:9090"  # Metrics port
+    volumes:
+      - logs:/app/logs
+      - ./docker/configs/app-docker.yaml:/app/configs/app.yaml
+    depends_on:
+      user-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.23
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # =======================
+  # 客户端测试
+  # =======================
+
+  # 客户端（可选，用于测试）
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: client
+    container_name: rpc-client
+    environment:
+      - NACOS_SERVER_ADDR=nacos:8848
+      - NACOS_USERNAME=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+      - NACOS_PASSWORD=${NACOS_AUTH_IDENTITY_VALUE:-nacos}
+    volumes:
+      - logs:/app/logs
+      - ./docker/configs/app-docker.yaml:/app/configs/app.yaml
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      rpc-network:
+        ipv4_address: 172.20.0.30
+    profiles:
+      - test  # 使用 profile 使客户端可选

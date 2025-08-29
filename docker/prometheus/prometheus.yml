@@ -1,0 +1,52 @@
+# Prometheus配置文件
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus自监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # RPC框架服务监控
+  - job_name: 'rpc-user-service'
+    static_configs:
+      - targets: ['user-service:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'rpc-order-service'
+    static_configs:
+      - targets: ['order-service:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'rpc-gateway'
+    static_configs:
+      - targets: ['gateway:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Redis监控（如果有redis_exporter）
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # MySQL监控（如果有mysqld_exporter）
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql:3306']
+    scrape_interval: 30s
+
+  # Nacos监控
+  - job_name: 'nacos'
+    static_configs:
+      - targets: ['nacos:8848']
+    metrics_path: '/nacos/actuator/prometheus'
+    scrape_interval: 30s
