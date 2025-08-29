@@ -489,6 +489,7 @@ wrk -t12 -c400 -d30s http://localhost:8080/api/v1/users
 - [架构优化](docs/ARCHITECTURE_OPTIMIZATION.md) - 项目架构优化历程和最佳实践
 - [网关架构](docs/GATEWAY_ARCHITECTURE.md) - API网关详细设计文档
 - [优化总结](docs/OPTIMIZATION_SUMMARY.md) - 性能优化和改进总结
+- [高并发分析](docs/HIGH_CONCURRENCY_ANALYSIS.md) - 完整的高并发适应性分析与优化建议
 
 ## 🤝 贡献指南
 
