@@ -477,11 +477,18 @@ wrk -t12 -c400 -d30s http://localhost:8080/api/v1/users
 
 ## 📚 相关文档
 
-- [API文档](docs/API.md)
-- [架构设计](docs/ARCHITECTURE.md)
-- [部署指南](docs/DEPLOYMENT.md)
-- [开发指南](docs/DEVELOPMENT.md)
-- [故障排除](docs/TROUBLESHOOTING.md)
+### 📖 核心文档
+- [API文档](docs/API.md) - 完整的RESTful API接口说明
+- [系统架构](docs/ARCHITECTURE.md) - 详细的系统架构设计文档
+- [部署指南](docs/DEPLOYMENT.md) - 本地开发、Docker、Kubernetes部署指南
+- [开发指南](docs/DEVELOPMENT.md) - 添加新服务、扩展功能、编写测试指南
+- [故障排除](docs/TROUBLESHOOTING.md) - 常见问题诊断和解决方案
+
+### 📋 补充文档
+- [项目结构](docs/PROJECT_STRUCTURE.md) - 详细的项目目录结构说明
+- [架构优化](docs/ARCHITECTURE_OPTIMIZATION.md) - 项目架构优化历程和最佳实践
+- [网关架构](docs/GATEWAY_ARCHITECTURE.md) - API网关详细设计文档
+- [优化总结](docs/OPTIMIZATION_SUMMARY.md) - 性能优化和改进总结
 
 ## 🤝 贡献指南
 
